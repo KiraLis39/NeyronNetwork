@@ -1,0 +1,7 @@
+*.ini
+/out
+/lib
+*.dat
+.idea
+./train
+train
