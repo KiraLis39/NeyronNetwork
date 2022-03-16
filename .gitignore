@@ -3,5 +3,6 @@
 /lib
 *.dat
 .idea
-./train
-train
+*.bmp
+*.png
+/train/*
