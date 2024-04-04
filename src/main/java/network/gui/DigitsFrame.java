@@ -46,9 +46,9 @@ public class DigitsFrame implements iWorkFrame {
     private final int[] sizes = new int[]{
             inputCount, // 784
 
-            533, // 533
-            137, // 137
-            45, // 46
+            512, // 533
+            256, // 137
+            64, // 46
 
             outputsCount // 21
     };
@@ -61,7 +61,7 @@ public class DigitsFrame implements iWorkFrame {
 
     private Long was;
     private int maxDigit = 0, success, epochNow;
-    private float errors;
+    private double errors;
     private int[] correctAnswers;
     private double[][] inputs;
     private double[] drawInputs;
@@ -77,6 +77,7 @@ public class DigitsFrame implements iWorkFrame {
     private JSpinner epoSpinner, bchSpinner, lnrSpinner, dcySpinner;
 
     private Thread trainThread;
+    private boolean isActive = true;
 
     private final ArrayList<String> letters = new ArrayList<>();
     private final int BLACK_PIXEL = -16777216; // -16777216;
@@ -548,14 +549,15 @@ public class DigitsFrame implements iWorkFrame {
             }
         };
 
-        new Thread(() -> {
-
-            while (true) {
+        Thread.startVirtualThread(() -> {
+            while (isActive) {
                 if (mousePressed > 0 && centerPane.isEnabled()) {
                     centerPane.repaint();
                 }
 
-                updateInfo();
+                if (curStatus.equals(Status.AWAIT)) {
+                    updateInfo();
+                }
 
                 try {
                     Thread.sleep(13);
@@ -563,8 +565,7 @@ public class DigitsFrame implements iWorkFrame {
                     Thread.currentThread().interrupt();
                 }
             }
-
-        }).start();
+        });
 
         reinit();
     }
@@ -597,7 +598,6 @@ public class DigitsFrame implements iWorkFrame {
 
         was = System.nanoTime();
         try {
-
             imagesFilesPaths = listFiles(Paths.get("./train/"));
             out("Exists images: " + imagesFilesPaths.size());
 
@@ -671,7 +671,7 @@ public class DigitsFrame implements iWorkFrame {
         }
 
         showFrame = new JFrame() {
-            BufferedImage image = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+            final BufferedImage image = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
 
             {
                 setTitle("Image of number " +
@@ -739,7 +739,7 @@ public class DigitsFrame implements iWorkFrame {
         curStatus = Status.LEARNING;
 
         nn.setLearningRate((double) lnrSpinner.getValue());
-        nn.setDecay(new BigDecimal((double) lnrSpinner.getValue() * (int) epoSpinner.getValue() * (double) dcySpinner.getValue()).doubleValue());
+        nn.setDecay(BigDecimal.valueOf((double) lnrSpinner.getValue() * (int) epoSpinner.getValue() * (double) dcySpinner.getValue()).doubleValue());
 
         trainThread = new Thread(() -> {
             try {
@@ -831,7 +831,7 @@ public class DigitsFrame implements iWorkFrame {
     }
 
     private int getNumberOfImageId(int id) {
-        return Integer.parseInt(imagesFilesPaths.get(id).getParent().toFile().getName().split("\\.")[0] + "");
+        return Integer.parseInt(imagesFilesPaths.get(id).getParent().toFile().getName().split("\\.")[0]);
     }
 
     private String getLetterOfImageId(int id) {

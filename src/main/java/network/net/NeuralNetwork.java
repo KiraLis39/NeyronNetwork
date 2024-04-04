@@ -78,11 +78,10 @@ public class NeuralNetwork {
     }
 
     public synchronized void backpropagation(double[] targets) {
-        double dlearningRate = learningRate * (1.0 / (1.0 + decay * iterationCount));
-//        if (showLRateInfo && secondPass()) {
-//            form.out("NLR #" + iterationCount + ": " + (float)dlearningRate);
-//        }
-        if (dlearningRate < 0.001) {dlearningRate = 0.001;} // защита от переполнения long.
+        double dlearningRate = learningRate * (1.0d / (1.0d + decay * iterationCount));
+        if (dlearningRate < 0.001) {
+            dlearningRate = 0.001; // защита от переполнения long.
+        }
 
         double[] errors = new double[layers[layers.length - 1].getSize()];
         for (int i = 0; i < layers[layers.length - 1].getSize(); i++) {

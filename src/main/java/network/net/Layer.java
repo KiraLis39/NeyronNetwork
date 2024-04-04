@@ -4,9 +4,9 @@ import lombok.Getter;
 
 @Getter
 public final class Layer {
-    private int size;
-    public double[] neurons;
-    public double[] biases;
+    private final int size;
+    public final double[] neurons;
+    public final double[] biases;
     public double[][] weights;
 
     public Layer(int size, int nextSize) {

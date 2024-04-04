@@ -1,4 +1,6 @@
 package network;
 
-public record CustomPoint(Double x, Double y, int type) {
+import java.awt.*;
+
+public record CustomPoint(double x, double y, int type, Color color) {
 }
