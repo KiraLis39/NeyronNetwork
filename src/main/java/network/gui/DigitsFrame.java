@@ -1,6 +1,8 @@
-package com;
+package network.gui;
 
-import net.NeuralNetwork;
+import lombok.extern.slf4j.Slf4j;
+import network.enums.Status;
+import network.net.NeuralNetwork;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -9,7 +11,6 @@ import javax.swing.plaf.nimbus.NimbusLookAndFeel;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
-import java.awt.image.WritableRaster;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -18,7 +19,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.List;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -26,26 +26,24 @@ import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+@Slf4j
+public class DigitsFrame implements iWorkFrame {
+    private static Status curStatus = Status.NOT_STARTED;
 
-public class FormDigits {
-    public enum STATUSES {NOT_STARTED, AWAIT, INITIALIZATION, LEARNING}
+    private final int w = 28, h = w, scale = 32;
 
-    private static STATUSES curStatus = STATUSES.NOT_STARTED;
+    private final int mThreadsCount = Runtime.getRuntime().availableProcessors();
+    private final UnaryOperator<Double> sigmoid = x -> 1 / (1 + Math.exp(-x));
+    private final UnaryOperator<Double> dsigmoid = y -> y * (1 - y);
 
-    private final static int w = 28, h = w, scale = 32;
+    private NeuralNetwork nn;
+    private ExecutorService initExecutors;
 
-    private final static int mThreadsCount = Runtime.getRuntime().availableProcessors();
-    private final static UnaryOperator<Double> sigmoid = x -> 1 / (1 + Math.exp(-x));
-    private final static UnaryOperator<Double> dsigmoid = y -> y * (1 - y);
+    private JFrame showFrame;
 
-    private static NeuralNetwork nn;
-    private static ExecutorService initExecutors;
-
-    private static JFrame showFrame;
-
-    private final static int inputCount = w * h; // колличество входных данных.
-    private final static int outputsCount = 21; // колличество вариантов ответа.
-    private final static int[] sizes = new int[]{
+    private final int inputCount = w * h; // колличество входных данных.
+    private final int outputsCount = 21; // колличество вариантов ответа.
+    private final int[] sizes = new int[]{
             inputCount, // 784
 
             533, // 533
@@ -55,41 +53,43 @@ public class FormDigits {
             outputsCount // 21
     };
 
-    private static double[] drawOutputs;
-    private static boolean showLRateInfo = true, trainBrakeFlag = false, showInitTestFrameFlag = false;
+    private double[] drawOutputs;
+    private boolean showLRateInfo = true, trainBrakeFlag = false, showInitTestFrameFlag = false;
 
-    private static int mousePressed = 0, mx = 0, my = 0;
-    private static double[][] colors;
+    private int mousePressed = 0, mx = 0, my = 0;
+    private double[][] colors;
 
-    private static Long was;
-    private static int maxDigit = 0, success, epochNow;
-    private static float errors;
-    private static int[] correctAnswers;
-    private static double[][] inputs;
-    private static double[] drawInputs;
+    private Long was;
+    private int maxDigit = 0, success, epochNow;
+    private float errors;
+    private int[] correctAnswers;
+    private double[][] inputs;
+    private double[] drawInputs;
 
-    private static BufferedImage img;
-    private static List<Path> imagesFilesPaths;
-    private static JPanel drawPane, rightInfoPane, centerPane;
-    private static JButton initButton, trainButton, saveButton, loadButton;
-    private static JTextArea outArea;
-    private static JScrollPane outScrollPane;
-    private static JLabel imagesCountLabel, currentStatusLabel, progressLabel;
-    private static JTextField enterRightAnswerField;
-    private static JSpinner epoSpinner, bchSpinner, lnrSpinner, dcySpinner;
+    private BufferedImage img;
+    private List<Path> imagesFilesPaths;
+    private JPanel drawPane, rightInfoPane, centerPane;
+    private JButton initButton, trainButton, saveButton, loadButton;
+    private JTextArea outArea;
+    private JScrollPane outScrollPane;
+    private JLabel imagesCountLabel, currentStatusLabel, progressLabel;
+    private JTextField enterRightAnswerField;
+    private JSpinner epoSpinner, bchSpinner, lnrSpinner, dcySpinner;
 
-    private static Thread trainThread;
+    private Thread trainThread;
 
-    private final static ArrayList<String> letters = new ArrayList<String>();
-    private static int BLACK_PIXEL = -16777216; // -16777216;
-    private static int GRAY_PIXEL = -9500000; // -9650000;
+    private final ArrayList<String> letters = new ArrayList<>();
+    private final int BLACK_PIXEL = -16777216; // -16777216;
+    private final int GRAY_PIXEL = -9500000; // -9650000;
 
 
-    public FormDigits() {
+    public DigitsFrame() {
         try {
             UIManager.setLookAndFeel(new NimbusLookAndFeel());
 //			SwingUtilities.updateComponentTreeUI(frame);
-        } catch (Exception e) {System.err.println("Couldn't get specified look and feel, for some reason.");}
+        } catch (Exception e) {
+            log.error("Couldn't get specified look and feel, for some reason: {}", e.getMessage());
+        }
 
         new JFrame() {
             {
@@ -137,11 +137,11 @@ public class FormDigits {
 
 
                                         // количество эпох:
-                                        SpinnerNumberModel epoModel = new SpinnerNumberModel(300, 1, 1000, 1);
+                                        SpinnerNumberModel epoModel = new SpinnerNumberModel(300d, 1d, 1000d, 1d);
                                         epoSpinner = new JSpinner(epoModel);
 
                                         // количество проходов за эпоху:
-                                        SpinnerNumberModel bchModel = new SpinnerNumberModel(150, 10, 1000, 1);
+                                        SpinnerNumberModel bchModel = new SpinnerNumberModel(150d, 10d, 1000d, 1d);
                                         bchSpinner = new JSpinner(bchModel);
 
                                         // learning rate:
@@ -211,7 +211,7 @@ public class FormDigits {
                                 drawInputs = new double[w * h];
                                 for (int i = 0; i < w; i++) {
                                     for (int j = 0; j < h; j++) {
-                                        if (mousePressed > 0 && curStatus != STATUSES.LEARNING) {
+                                        if (mousePressed > 0 && curStatus != Status.LEARNING) {
                                             double dist = (i - mx) * (i - mx) + (j - my) * (j - my);
 
                                             if (dist < 1) {
@@ -240,7 +240,7 @@ public class FormDigits {
                                     }
                                 }
 
-                                if (mousePressed > 0 && curStatus != STATUSES.LEARNING) {
+                                if (mousePressed > 0 && curStatus != Status.LEARNING) {
                                     drawOutputs = nn.feedForward(drawInputs);
                                     maxDigit = 0;
                                     double maxDigitWeight = -1;
@@ -372,8 +372,8 @@ public class FormDigits {
                                                             return;
                                                         }
 
-                                                        if (curStatus != STATUSES.LEARNING && nn != null) {
-                                                            out("Laern this sign is '" + enterRightAnswerField.getText() + "'");
+                                                        if (curStatus != Status.LEARNING && nn != null) {
+                                                            out("Learn this sign is '" + enterRightAnswerField.getText() + "'");
                                                             String hca = enterRightAnswerField.getText().trim();
                                                             enterRightAnswerField.setText(null);
                                                             enterRightAnswerField.setText("\r");
@@ -488,7 +488,7 @@ public class FormDigits {
                                 addActionListener(new ActionListener() {
                                     @Override
                                     public void actionPerformed(ActionEvent e) {
-                                        int a = JOptionPane.showConfirmDialog(null, "Are You shure?", "Save this net?", JOptionPane.OK_CANCEL_OPTION);
+                                        int a = JOptionPane.showConfirmDialog(null, "Are You sure?", "Save this net?", JOptionPane.OK_CANCEL_OPTION);
                                         if (a == 0) {
                                             String name = JOptionPane.showInputDialog(null, "Как ты хочешь назвать файл?", "Имя файла:", JOptionPane.QUESTION_MESSAGE);
                                             nn.save(name);
@@ -569,22 +569,23 @@ public class FormDigits {
         reinit();
     }
 
-    private static void reinit() {
-        curStatus = STATUSES.INITIALIZATION;
+    private void reinit() {
+        curStatus = Status.INITIALIZATION;
 //        decay = new BigDecimal((double) lnrSpinner.getValue() * (double) epoSpinner.getValue() * (double) dcySpinner.getValue()); // скорость затухания модификатора обучения (0.00005 / 0.000034).
 
         letters.addAll(Arrays.stream(new String[] {"A", "B", "C", "E", "H", "K", "M", "P", "T", "X", "Y"}).toList());
 
         nn = new NeuralNetwork(
+                this,
                 (double) lnrSpinner.getValue(),
-                new BigDecimal((double) lnrSpinner.getValue() * (int) epoSpinner.getValue() * (double) dcySpinner.getValue()).doubleValue(), sigmoid, dsigmoid, sizes);
+                BigDecimal.valueOf((double) lnrSpinner.getValue() * (int) epoSpinner.getValue() * (double) dcySpinner.getValue()).doubleValue(), sigmoid, dsigmoid, sizes);
         nn.setShowLRateInfo(showLRateInfo);
 
         clearCanvas();
 
         out(String.format("""
                 Начата инициализация нейросети с параметрами:
-                Потоков: %h 
+                Потоков: %h
                 Эпох: %d
                 Батч: %d
                 LR: %s
@@ -592,7 +593,7 @@ public class FormDigits {
                 Вход: %s
                 Вывод: %s
                 """, mThreadsCount, epoSpinner.getValue(), bchSpinner.getValue(), lnrSpinner.getValue(),
-                String.format("%,.08f", new BigDecimal((double) lnrSpinner.getValue() * (int) epoSpinner.getValue() * (double) dcySpinner.getValue()).doubleValue()), inputCount, outputsCount));
+                String.format("%,.08f", BigDecimal.valueOf((double) lnrSpinner.getValue() * (int) epoSpinner.getValue() * (double) dcySpinner.getValue()).doubleValue()), inputCount, outputsCount));
 
         was = System.nanoTime();
         try {
@@ -614,7 +615,7 @@ public class FormDigits {
                         try {
                             initAI(tmp, mThreadsCount);
                         } catch (IOException e) {
-                            e.printStackTrace();
+                            log.error("Error (019): {}", e.getMessage());
                         }
                     }
 
@@ -649,22 +650,22 @@ public class FormDigits {
             initExecutors.shutdown();
 
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Error (016): {}", e.getMessage());
         }
 
         try {
             while (!initExecutors.awaitTermination(250, TimeUnit.MILLISECONDS)) {
             }
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            log.error("Error (005): {}", e.getMessage());
         }
 
         trainButton.setEnabled(true);
         out("Init finished for a " + ((System.nanoTime() - was) / 1000000000.0) + " sec.\n");
-        curStatus = STATUSES.AWAIT;
+        curStatus = Status.AWAIT;
     }
 
-    private static void showTestDialogFrame(int imIndex, double[][] inputs) {
+    private void showTestDialogFrame(int imIndex, double[][] inputs) {
         if (showFrame != null && showFrame.isVisible()) {
             return;
         }
@@ -690,7 +691,7 @@ public class FormDigits {
 
                             g.dispose();
                         } catch (IOException e) {
-                            e.printStackTrace();
+                            log.error("Error (008): {}", e.getMessage());
                         }
                     }
 
@@ -734,8 +735,8 @@ public class FormDigits {
         };
     }
 
-    private static void train() {
-        curStatus = STATUSES.LEARNING;
+    private void train() {
+        curStatus = Status.LEARNING;
 
         nn.setLearningRate((double) lnrSpinner.getValue());
         nn.setDecay(new BigDecimal((double) lnrSpinner.getValue() * (int) epoSpinner.getValue() * (double) dcySpinner.getValue()).doubleValue());
@@ -798,10 +799,10 @@ public class FormDigits {
                 out("Training finished for a " + ((System.nanoTime() - was) / 1000000000.0 / 60.0) + " min.");
 
             } catch (Exception e) {
-                e.printStackTrace();
+                log.error("Error (007): {}", e.getMessage());
             } finally {
                 trainButton.setEnabled(true);
-                curStatus = STATUSES.AWAIT;
+                curStatus = Status.AWAIT;
                 drawPane.setEnabled(true);
                 rightInfoPane.setEnabled(true);
             }
@@ -810,7 +811,7 @@ public class FormDigits {
         trainThread.start();
     }
 
-    private static void backPropagationBySignHandle(String correctAnswer) {
+    private void backPropagationBySignHandle(String correctAnswer) {
         int correctNumber;
 
         try {
@@ -825,32 +826,30 @@ public class FormDigits {
             out("Correct sign to index " + correctNumber + (correctNumber > 9 ? " (" + letters.get(correctNumber) + ")" : "."));
             nn.backpropagation(targets);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Error (009): {}", e.getMessage());
         }
-
     }
 
-    private static int getNumberOfImageId(int id) {
+    private int getNumberOfImageId(int id) {
         return Integer.parseInt(imagesFilesPaths.get(id).getParent().toFile().getName().split("\\.")[0] + "");
     }
 
-    private static String getLetterOfImageId(int id) {
+    private String getLetterOfImageId(int id) {
         return letters.get(getNumberOfImageId(id) - 10);
     }
 
-    public static List<Path> listFiles(Path path) throws IOException {
-        List<Path> result;
-
+    public List<Path> listFiles(Path path) throws IOException {
         try (Stream<Path> stream = Files.walk(path)) {
-            result = stream
+            return stream
                     .filter(Files::isRegularFile)
                     .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("Error (014): {}", e.getMessage());
+            return Collections.emptyList();
         }
-
-        return result;
     }
 
-    private static void clearCanvas() {
+    private void clearCanvas() {
         colors = new double[w][h];
         for (double[] row : colors) {
             Arrays.fill(row, 1);
@@ -860,7 +859,7 @@ public class FormDigits {
     }
 
 
-    private static BufferedImage wrapToCanvas(File imageFile) {
+    private BufferedImage wrapToCanvas(File imageFile) {
         BufferedImage im = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
 
         try {
@@ -876,14 +875,13 @@ public class FormDigits {
 //            g.setRenderingHint(RenderingHints.KEY_DITHERING, RenderingHints.VALUE_DITHER_DISABLE);
             g.dispose();
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Error (010): {}", e.getMessage());
         }
-        ;
 
         return im;
     }
 
-    private static BufferedImage removeGraySpots(BufferedImage grayImage) {
+    private BufferedImage removeGraySpots(BufferedImage grayImage) {
 
         for (int y = 0; y < grayImage.getHeight(); y++) {
             for (int x = 0; x < grayImage.getWidth(); x++) {
@@ -895,8 +893,7 @@ public class FormDigits {
                     grayImage.setRGB(x, y, Color.WHITE.getRGB());
                 } catch (Exception e) {
                     System.err.println("Fail removing gray pixel: " + e.getMessage());
-                    e.printStackTrace();
-                    continue;
+                    log.error("Error (011): {}", e.getMessage());
                 }
 
             }
@@ -905,7 +902,7 @@ public class FormDigits {
         return grayImage;
     }
 
-    private static BufferedImage createBWImage(BufferedImage srcImage) {
+    private BufferedImage createBWImage(BufferedImage srcImage) {
         BufferedImage image = new BufferedImage(srcImage.getWidth(), srcImage.getHeight(), BufferedImage.TYPE_BYTE_BINARY);
 //        BufferedImage image = new BufferedImage(srcImage.getWidth(), srcImage.getHeight(), BufferedImage.TYPE_BYTE_INDEXED);
 //        BufferedImage image = new BufferedImage(srcImage.getWidth(), srcImage.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
@@ -918,7 +915,7 @@ public class FormDigits {
         return image;
     }
 
-    private static BufferedImage removeDirtVoid(BufferedImage dirtyImage) {
+    private BufferedImage removeDirtVoid(BufferedImage dirtyImage) {
         int[] voidMatrix = new int[4];
 
         for (int y = 0; y < dirtyImage.getHeight(); y++) {
@@ -938,8 +935,7 @@ public class FormDigits {
                     }
                 } catch (Exception e) {
                     System.err.println("Fail clean void pixel: " + e.getMessage());
-                    e.printStackTrace();
-                    continue;
+                    log.error("Error (012): {}", e.getMessage());
                 }
 
             }
@@ -949,7 +945,7 @@ public class FormDigits {
     }
 
 
-    private static void scrollDown() {
+    private void scrollDown() {
         new Thread(() -> {
             try {
                 Thread.sleep(500);
@@ -965,18 +961,17 @@ public class FormDigits {
     private void updateInfo() {
         try {
             currentStatusLabel.setText("Current status: " + curStatus);
-            currentStatusLabel.setForeground(curStatus == STATUSES.AWAIT ? Color.GRAY : curStatus == STATUSES.INITIALIZATION ? Color.YELLOW : Color.GREEN);
+            currentStatusLabel.setForeground(curStatus == Status.AWAIT ? Color.GRAY : curStatus == Status.INITIALIZATION ? Color.YELLOW : Color.GREEN);
             imagesCountLabel.setText("Images count: " + imagesFilesPaths.size());
             progressLabel.setText("Progress: " + ((int) (1f / (int)epoSpinner.getValue() * epochNow * 100f)) + "%");
         } catch (NullPointerException e) {
-//            e.printStackTrace();
+            log.error("Error (013): {}", e.getMessage());
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Error (014): {}", e.getMessage());
         }
-
     }
 
-    public static void out(String mes) {
+    public void out(String mes) {
         outArea.append(mes + "\n");
         scrollDown();
     }

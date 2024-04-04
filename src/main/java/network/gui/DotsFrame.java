@@ -1,7 +1,7 @@
-package com;
+package network.gui;
 
-import door.CustomPoint;
-import net.NeuralNetwork;
+import network.CustomPoint;
+import network.net.NeuralNetwork;
 
 import javax.swing.*;
 import javax.swing.event.ChangeEvent;
@@ -15,23 +15,23 @@ import java.util.ArrayList;
 import java.util.function.UnaryOperator;
 
 
-public class Frame extends JFrame {
+public class DotsFrame extends JFrame implements iWorkFrame {
     private final int w = 1440, h = 900;
 
-    private double pointDiameter = 26D;
+    private final double pointDiameter = 26D;
     private double learningRate = 0.0025D;
     private double decay = 0.0025D;
     private int drawQuality = 36;
     private int workSpeed = 1000;
 
-    private UnaryOperator<Double> sigmoid = x -> 1 / (1 + Math.exp(-x));
-    private UnaryOperator<Double> dsigmoid = y -> y * (1 - y);
-    private int[] sizes = new int[] {2, 8, 10, 2};
+    private final UnaryOperator<Double> sigmoid = x -> 1 / (1 + Math.exp(-x));
+    private final UnaryOperator<Double> dsigmoid = y -> y * (1 - y);
+    private final int[] sizes = new int[] {2, 8, 10, 2};
 
-    private NeuralNetwork nn;
-    private Thread drawThread;
+    private final NeuralNetwork nn;
+    private final Thread drawThread;
     private BufferedImage pimg;
-    private List<CustomPoint> markers = new ArrayList<>();
+    private final List<CustomPoint> markers = new ArrayList<>();
 
     private static JPanel drawPane, controlPane;
     private JSpinner dQualitySpiner;
@@ -39,10 +39,10 @@ public class Frame extends JFrame {
     private boolean warnMes = false, renderOn = false, useGradient = true;
 
 
-    public Frame() {
+    public DotsFrame() {
         if (w % drawQuality != 0 || h % drawQuality != 0) {warnMes = true;}
 
-        nn = new NeuralNetwork(learningRate, decay, sigmoid, dsigmoid, sizes);
+        nn = new NeuralNetwork(this, learningRate, decay, sigmoid, dsigmoid, sizes);
 
         setPreferredSize(new Dimension(w, h));
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -62,10 +62,10 @@ public class Frame extends JFrame {
                 g2D.drawImage(pimg, 0, 0, getWidth(), getHeight(), this);
 
                 for (CustomPoint p : markers) {
-                    if (p.type == 0) {g2D.setColor(Color.GREEN);
+                    if (p.type() == 0) {g2D.setColor(Color.GREEN);
                     } else {g2D.setColor(Color.BLUE);}
 
-                    g2D.fillOval((int) (p.x - pointDiameter / 2D), (int) (p.y - pointDiameter / 2D), (int) pointDiameter, (int) pointDiameter);
+                    g2D.fillOval((int) (p.x() - pointDiameter / 2D), (int) (p.y() - pointDiameter / 2D), (int) pointDiameter, (int) pointDiameter);
                 }
 
                 g.setColor(Color.RED);
@@ -103,10 +103,10 @@ public class Frame extends JFrame {
 
                         CustomPoint aNewMarker = new CustomPoint(e.getPoint().getX(), e.getPoint().getY(), type);
                         for (CustomPoint existMarker : markers) {
-                            if (aNewMarker.x >= existMarker.x - pointDiameter
-                                    && aNewMarker.x <= existMarker.x + pointDiameter
-                                    && aNewMarker.y >= existMarker.y - pointDiameter
-                                    && aNewMarker.y <= existMarker.y + pointDiameter
+                            if (aNewMarker.x() >= existMarker.x() - pointDiameter
+                                    && aNewMarker.x() <= existMarker.x() + pointDiameter
+                                    && aNewMarker.y() >= existMarker.y() - pointDiameter
+                                    && aNewMarker.y() <= existMarker.y() + pointDiameter
                             ) {return;}
                         }
                         markers.add(aNewMarker);
@@ -122,12 +122,7 @@ public class Frame extends JFrame {
                 JSpinner lRateSpiner = new JSpinner(sm) {
                     {
                         setToolTipText("Learning rate");
-                        addChangeListener(new ChangeListener() {
-                            @Override
-                            public void stateChanged(ChangeEvent e) {
-                                learningRate = (Double) getModel().getValue();
-                            }
-                        });
+                        addChangeListener(e -> learningRate = (Double) getModel().getValue());
                         setEditor(new JSpinner.NumberEditor(this, "0.0000"));
                     }
                 };
@@ -137,12 +132,7 @@ public class Frame extends JFrame {
                 JSpinner wSpeedSpiner = new JSpinner(sm2) {
                     {
                         setToolTipText("Work speed");
-                        addChangeListener(new ChangeListener() {
-                            @Override
-                            public void stateChanged(ChangeEvent e) {
-                                workSpeed = (int) getModel().getValue();
-                            }
-                        });
+                        addChangeListener(e -> workSpeed = (int) getModel().getValue());
                     }
                 };
 
@@ -176,19 +166,15 @@ public class Frame extends JFrame {
         drawQuality = h / 4 / (int) dQualitySpiner.getModel().getValue();
         pimg = new BufferedImage(w / drawQuality, h / drawQuality, BufferedImage.TYPE_INT_RGB);
 
-        drawThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                while (true) {
-                    recheck();
-                    drawPane.repaint();
+        drawThread = new Thread(() -> {
+            while (true) {
+                recheck();
+                drawPane.repaint();
 
-                  try {Thread.sleep(13);
-                  } catch (InterruptedException e) {
-                      e.printStackTrace();
-                      Thread.currentThread().interrupt();
-                  }
-                }
+              try {Thread.sleep(13);
+              } catch (InterruptedException e) {
+                  Thread.currentThread().interrupt();
+              }
             }
         });
         drawThread.start();
@@ -196,19 +182,18 @@ public class Frame extends JFrame {
 
     private void recheck() {
         try {
-            if (markers.size() > 0) {
-
+            if (!markers.isEmpty()) {
                 for (int k = 0; k < workSpeed; k++) {
                     CustomPoint p = markers.get((int) (Math.random() * markers.size()));
-                    double nx = p.x / w;
-                    double ny = p.y / h;
+                    double nx = p.x() / w;
+                    double ny = p.y() / h;
                     nn.feedForward(new double[]{nx, ny});
 
                     double[] targets = new double[2];
-                    switch (p.type) {
-                        case 0: targets[0] = 1;
-                        break;
-                        default: targets[1] = 1;
+                    if (p.type() == 0) {
+                        targets[0] = 1;
+                    } else {
+                        targets[1] = 1;
                     }
 
                     // отправляем данные для коррекции весов:

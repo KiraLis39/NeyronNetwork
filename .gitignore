@@ -6,3 +6,4 @@
 *.bmp
 *.png
 /train/*
+*.class

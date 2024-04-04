@@ -1,37 +1,45 @@
-package net;
+package network.net;
 
-import com.FormDigits;
-import com.google.gson.Gson;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import network.gui.iWorkFrame;
 
 import java.io.*;
-import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.function.UnaryOperator;
 
 
+@Slf4j
 public class NeuralNetwork {
-    private static Layer[] layers;
-    private static UnaryOperator<Double> activation;
-    private static UnaryOperator<Double> derivative;
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final UnaryOperator<Double> activation;
+    private final UnaryOperator<Double> derivative;
+    private Layer[] layers;
 
-    private static int iterationCount;
-    private static double learningRate;
-    private static double decay;
+    private int iterationCount;
+    @Setter
+    private double learningRate;
+    @Setter
+    private double decay;
 
-    private static boolean showLRateInfo;
-    private static long was = System.currentTimeMillis();
+    @Setter
+    private boolean showLRateInfo;
+    private long was;
+    private iWorkFrame form;
 
-    private Gson g = new Gson();
 
-
-    public NeuralNetwork(double learningRate, double decay, UnaryOperator<Double> activation, UnaryOperator<Double> derivative, int... sizes) {
+    public NeuralNetwork(iWorkFrame frame, double learningRate, double decay, UnaryOperator<Double> activation, UnaryOperator<Double> derivative, int... sizes) {
         this.learningRate = learningRate;
         this.decay = decay;
         this.activation = activation;
         this.derivative = derivative;
         this.layers = new Layer[sizes.length];
+        this.form = frame;
+
+        this.was = System.currentTimeMillis();
 
         for (int i = 0; i < sizes.length; i++) {
             int nextSize = 0;
@@ -56,9 +64,9 @@ public class NeuralNetwork {
             Layer currentLayer = layers[i - 1];
             Layer nextLayer = layers[i];
 
-            for (int j = 0; j < nextLayer.size; j++) {
+            for (int j = 0; j < nextLayer.getSize(); j++) {
                 nextLayer.neurons[j] = 0;
-                for (int k = 0; k < currentLayer.size; k++) {
+                for (int k = 0; k < currentLayer.getSize(); k++) {
                     nextLayer.neurons[j] += currentLayer.neurons[k] * currentLayer.weights[k][j];
                 }
                 nextLayer.neurons[j] += nextLayer.biases[j];
@@ -70,54 +78,54 @@ public class NeuralNetwork {
     }
 
     public synchronized void backpropagation(double[] targets) {
-
         double dlearningRate = learningRate * (1.0 / (1.0 + decay * iterationCount));
-        if (showLRateInfo && secondPass()) {
-            FormDigits.out("NLR #" + iterationCount + ": " + (float)dlearningRate);}
+//        if (showLRateInfo && secondPass()) {
+//            form.out("NLR #" + iterationCount + ": " + (float)dlearningRate);
+//        }
         if (dlearningRate < 0.001) {dlearningRate = 0.001;} // защита от переполнения long.
 
-        double[] errors = new double[layers[layers.length - 1].size];
-        for (int i = 0; i < layers[layers.length - 1].size; i++) {
+        double[] errors = new double[layers[layers.length - 1].getSize()];
+        for (int i = 0; i < layers[layers.length - 1].getSize(); i++) {
             errors[i] = targets[i] - layers[layers.length - 1].neurons[i];
         }
 
         for (int k = layers.length - 2; k >= 0; k--) {
             Layer previousLayer = layers[k];
             Layer currentLayer = layers[k + 1];
-            double[] errorsNext = new double[previousLayer.size];
-            double[] gradients = new double[currentLayer.size];
+            double[] errorsNext = new double[previousLayer.getSize()];
+            double[] gradients = new double[currentLayer.getSize()];
 
             // формирование градиента biases:
-            for (int i = 0; i < currentLayer.size; i++) {
+            for (int i = 0; i < currentLayer.getSize(); i++) {
                 gradients[i] = errors[i] * derivative.apply(layers[k + 1].neurons[i]);
                 gradients[i] *= dlearningRate;
             }
 
-            double[][] deltas = new double[currentLayer.size][previousLayer.size];
-            for (int i = 0; i < currentLayer.size; i++) {
-                for (int j = 0; j < previousLayer.size; j++) {
+            double[][] deltas = new double[currentLayer.getSize()][previousLayer.getSize()];
+            for (int i = 0; i < currentLayer.getSize(); i++) {
+                for (int j = 0; j < previousLayer.getSize(); j++) {
                     deltas[i][j] = gradients[i] * previousLayer.neurons[j];
                 }
             }
 
-            for (int i = 0; i < previousLayer.size; i++) {
+            for (int i = 0; i < previousLayer.getSize(); i++) {
                 errorsNext[i] = 0;
-                for (int j = 0; j < currentLayer.size; j++) {
+                for (int j = 0; j < currentLayer.getSize(); j++) {
                     errorsNext[i] += previousLayer.weights[i][j] * errors[j];
                 }
             }
 
-            errors = new double[previousLayer.size];
-            System.arraycopy(errorsNext, 0, errors, 0, previousLayer.size);
+            errors = new double[previousLayer.getSize()];
+            System.arraycopy(errorsNext, 0, errors, 0, previousLayer.getSize());
             double[][] weightsNew = new double[previousLayer.weights.length][previousLayer.weights[0].length];
-            for (int i = 0; i < currentLayer.size; i++) {
-                for (int j = 0; j < previousLayer.size; j++) {
+            for (int i = 0; i < currentLayer.getSize(); i++) {
+                for (int j = 0; j < previousLayer.getSize(); j++) {
                     weightsNew[j][i] = previousLayer.weights[j][i] + deltas[i][j];
                 }
             }
 
             previousLayer.weights = weightsNew;
-            for (int i = 0; i < currentLayer.size; i++) {
+            for (int i = 0; i < currentLayer.getSize(); i++) {
                 currentLayer.biases[i] += gradients[i];
             }
         }
@@ -125,58 +133,35 @@ public class NeuralNetwork {
         iterationCount++;
     }
 
-    private boolean secondPass() {
-        if (System.currentTimeMillis() - was > 2000) {
-            was = System.currentTimeMillis();
-            return true;
-        }
-        return false;
-    }
-
-    public void setShowLRateInfo(boolean showLRateInfo) {
-        this.showLRateInfo = showLRateInfo;
-    }
-
-
     public void save(String newName) {
-        FormDigits.out("Saving net...");
+//        form.out("Saving net...");
 
         String homeDir = "./dat/";
         try {
             if (!Files.exists(Path.of(homeDir))) {Files.createDirectory(Paths.get(homeDir));}
             Files.createFile(Paths.get(homeDir + "/" + newName + ".dat"));
         } catch (IOException e) {
-            e.printStackTrace();
-            FormDigits.out("!!! Не удалось записать сеть !!!");
+            log.error("Error (002): {}", e.getMessage());
+//            form.out("!!! Не удалось записать сеть !!!");
             return;
         }
 
-        String gsonDump = g.toJson(layers);
         try (OutputStreamWriter osw = new OutputStreamWriter(new FileOutputStream(homeDir + "/" + newName + ".dat"))) {
+            String gsonDump = mapper.writeValueAsString(layers);
             osw.write(gsonDump);
-            FormDigits.out("Net was saved.");
+//            form.out("Net was saved.");
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Error (001): {}", e.getMessage());
         }
-
     }
 
     public void load(Path pathToDatFile) {
         try (BufferedReader br = new BufferedReader(new FileReader(pathToDatFile.toFile()))) {
-            layers = g.fromJson(br, Layer[].class);
-            FormDigits.out("Net was loaded.");
+            layers = mapper.readValue(br, Layer[].class);
+//            form.out("Net was loaded.");
         } catch (Exception e) {
-            e.printStackTrace();
-            FormDigits.out("!!! Не удалось загрузить сеть из файла !!!");
+            log.error("Error (003): {}", e.getMessage());
+//            form.out("!!! Не удалось загрузить сеть из файла !!!");
         }
-    }
-
-
-    public void setLearningRate(double learningRate) {
-        this.learningRate = learningRate;
-    }
-
-    public void setDecay(double decay) {
-        this.decay = decay;
     }
 }
