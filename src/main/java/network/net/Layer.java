@@ -5,7 +5,7 @@ import lombok.Getter;
 @Getter
 public final class Layer {
     private final int size;
-    public final double[] neurons;
+    private final double[] neurons;
     public final double[] biases;
     public double[][] weights;
 
@@ -14,5 +14,9 @@ public final class Layer {
         this.neurons = new double[size];
         this.biases = new double[size];
         this.weights = new double[size][nextSize];
+    }
+
+    public void setNeuron(int j, double value) {
+        this.neurons[j] = value;
     }
 }

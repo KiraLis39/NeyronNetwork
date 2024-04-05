@@ -58,23 +58,23 @@ public class NeuralNetwork {
     }
 
     public synchronized double[] feedForward(double[] inputs) {
-        System.arraycopy(inputs, 0, layers[0].neurons, 0, inputs.length);
+        System.arraycopy(inputs, 0, layers[0].getNeurons(), 0, inputs.length);
 
         for (int i = 1; i < layers.length; i++)  {
             Layer currentLayer = layers[i - 1];
             Layer nextLayer = layers[i];
 
             for (int j = 0; j < nextLayer.getSize(); j++) {
-                nextLayer.neurons[j] = 0;
+                nextLayer.setNeuron(j, 0);
                 for (int k = 0; k < currentLayer.getSize(); k++) {
-                    nextLayer.neurons[j] += currentLayer.neurons[k] * currentLayer.weights[k][j];
+                    nextLayer.setNeuron(j, nextLayer.getNeurons()[j] + currentLayer.getNeurons()[k] * currentLayer.weights[k][j]);
                 }
-                nextLayer.neurons[j] += nextLayer.biases[j];
-                nextLayer.neurons[j] = activation.apply(nextLayer.neurons[j]);
+                nextLayer.setNeuron(j, nextLayer.getNeurons()[j] + nextLayer.biases[j]);
+                nextLayer.setNeuron(j, activation.apply(nextLayer.getNeurons()[j]));
             }
         }
 
-        return layers[layers.length - 1].neurons;
+        return layers[layers.length - 1].getNeurons();
     }
 
     public synchronized void backpropagation(double[] targets) {
@@ -85,7 +85,7 @@ public class NeuralNetwork {
 
         double[] errors = new double[layers[layers.length - 1].getSize()];
         for (int i = 0; i < layers[layers.length - 1].getSize(); i++) {
-            errors[i] = targets[i] - layers[layers.length - 1].neurons[i];
+            errors[i] = targets[i] - layers[layers.length - 1].getNeurons()[i];
         }
 
         for (int k = layers.length - 2; k >= 0; k--) {
@@ -96,14 +96,14 @@ public class NeuralNetwork {
 
             // формирование градиента biases:
             for (int i = 0; i < currentLayer.getSize(); i++) {
-                gradients[i] = errors[i] * derivative.apply(layers[k + 1].neurons[i]);
+                gradients[i] = errors[i] * derivative.apply(layers[k + 1].getNeurons()[i]);
                 gradients[i] *= dlearningRate;
             }
 
             double[][] deltas = new double[currentLayer.getSize()][previousLayer.getSize()];
             for (int i = 0; i < currentLayer.getSize(); i++) {
                 for (int j = 0; j < previousLayer.getSize(); j++) {
-                    deltas[i][j] = gradients[i] * previousLayer.neurons[j];
+                    deltas[i][j] = gradients[i] * previousLayer.getNeurons()[j];
                 }
             }
 
