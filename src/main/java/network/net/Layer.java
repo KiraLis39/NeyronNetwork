@@ -6,7 +6,7 @@ import lombok.Getter;
 public final class Layer {
     private final int size;
     private final double[] neurons;
-    public final double[] biases;
+    private final double[] biases;
     public double[][] weights;
 
     public Layer(int size, int nextSize) {
@@ -18,5 +18,9 @@ public final class Layer {
 
     public void setNeuron(int j, double value) {
         this.neurons[j] = value;
+    }
+
+    public void setBiase(int j, double value) {
+        this.biases[j] = value;
     }
 }

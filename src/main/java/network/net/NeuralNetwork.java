@@ -1,63 +1,52 @@
 package network.net;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import network.gui.iWorkFrame;
-
-import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.function.UnaryOperator;
 
 
 @Slf4j
 public class NeuralNetwork {
-    private final ObjectMapper mapper = new ObjectMapper();
-    private final UnaryOperator<Double> activation;
-    private final UnaryOperator<Double> derivative;
-    private Layer[] layers;
+    private final UnaryOperator<Double> activation = x -> 1 / (1 + Math.exp(-x));
+    private final UnaryOperator<Double> derivative = y -> y * (1 - y);
+    private final int[] sizes = new int[] {
+            2, // 2
+            4, // -
+            16, // 8
+            32, // 10
+            2, // 2
+    };
+    private final Layer[] layers = new Layer[sizes.length];
 
+    @Setter
+    @Getter
+    private double learningRate = 0.0020D;
+
+    @Setter
+    private double decay = 0.0025D;
     private int iterationCount;
-    @Setter
-    private double learningRate;
-    @Setter
-    private double decay;
-
-    @Setter
-    private boolean showLRateInfo;
-    private long was;
-    private iWorkFrame form;
 
 
-    public NeuralNetwork(iWorkFrame frame, double learningRate, double decay, UnaryOperator<Double> activation, UnaryOperator<Double> derivative, int... sizes) {
-        this.learningRate = learningRate;
-        this.decay = decay;
-        this.activation = activation;
-        this.derivative = derivative;
-        this.layers = new Layer[sizes.length];
-        this.form = frame;
-
-        this.was = System.currentTimeMillis();
-
+    public NeuralNetwork() {
         for (int i = 0; i < sizes.length; i++) {
             int nextSize = 0;
-            if(i < sizes.length - 1) {nextSize = sizes[i + 1];}
+            if(i < sizes.length - 1) {
+                nextSize = sizes[i + 1];
+            }
 
             layers[i] = new Layer(sizes[i], nextSize);
 
             for (int j = 0; j < sizes[i]; j++) {
-                layers[i].biases[j] = Math.random() * 2.0 - 1.0;
+                layers[i].setBiase(j, Math.random() * 2.0d - 1.0d);
                 for (int k = 0; k < nextSize; k++) {
                     layers[i].weights[j][k] = Math.random() * 2.0 - 1.0;
                 }
             }
-
         }
     }
 
-    public synchronized double[] feedForward(double[] inputs) {
+    public double[] feedForward(double[] inputs) {
         System.arraycopy(inputs, 0, layers[0].getNeurons(), 0, inputs.length);
 
         for (int i = 1; i < layers.length; i++)  {
@@ -69,7 +58,7 @@ public class NeuralNetwork {
                 for (int k = 0; k < currentLayer.getSize(); k++) {
                     nextLayer.setNeuron(j, nextLayer.getNeurons()[j] + currentLayer.getNeurons()[k] * currentLayer.weights[k][j]);
                 }
-                nextLayer.setNeuron(j, nextLayer.getNeurons()[j] + nextLayer.biases[j]);
+                nextLayer.setNeuron(j, nextLayer.getNeurons()[j] + nextLayer.getBiases()[j]);
                 nextLayer.setNeuron(j, activation.apply(nextLayer.getNeurons()[j]));
             }
         }
@@ -77,7 +66,7 @@ public class NeuralNetwork {
         return layers[layers.length - 1].getNeurons();
     }
 
-    public synchronized void backpropagation(double[] targets) {
+    public void backpropagation(double[] targets) {
         double dlearningRate = learningRate * (1.0d / (1.0d + decay * iterationCount));
         if (dlearningRate < 0.001) {
             dlearningRate = 0.001; // защита от переполнения long.
@@ -125,42 +114,10 @@ public class NeuralNetwork {
 
             previousLayer.weights = weightsNew;
             for (int i = 0; i < currentLayer.getSize(); i++) {
-                currentLayer.biases[i] += gradients[i];
+                currentLayer.setBiase(i, currentLayer.getBiases()[i] + gradients[i]);
             }
         }
 
         iterationCount++;
-    }
-
-    public void save(String newName) {
-//        form.out("Saving net...");
-
-        String homeDir = "./dat/";
-        try {
-            if (!Files.exists(Path.of(homeDir))) {Files.createDirectory(Paths.get(homeDir));}
-            Files.createFile(Paths.get(homeDir + "/" + newName + ".dat"));
-        } catch (IOException e) {
-            log.error("Error (002): {}", e.getMessage());
-//            form.out("!!! Не удалось записать сеть !!!");
-            return;
-        }
-
-        try (OutputStreamWriter osw = new OutputStreamWriter(new FileOutputStream(homeDir + "/" + newName + ".dat"))) {
-            String gsonDump = mapper.writeValueAsString(layers);
-            osw.write(gsonDump);
-//            form.out("Net was saved.");
-        } catch (IOException e) {
-            log.error("Error (001): {}", e.getMessage());
-        }
-    }
-
-    public void load(Path pathToDatFile) {
-        try (BufferedReader br = new BufferedReader(new FileReader(pathToDatFile.toFile()))) {
-            layers = mapper.readValue(br, Layer[].class);
-//            form.out("Net was loaded.");
-        } catch (Exception e) {
-            log.error("Error (003): {}", e.getMessage());
-//            form.out("!!! Не удалось загрузить сеть из файла !!!");
-        }
     }
 }
